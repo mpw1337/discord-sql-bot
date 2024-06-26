@@ -1,14 +1,15 @@
 require("dotenv").config();
-const { Client, MessageEmbed } = require("discord.js");
+const MessageEmbed = require("./MessageEmbed.js");
 const mysql = require("mysql2");
 const fs = require("fs");
 const path = require("path");
+const { Bot } = require("grammy");
 
 const LOG_FILE_PATH = path.join(__dirname, "log.txt");
 const MAX_LOG_SIZE = 1 * 1024 * 1024; // 1MB
 
 // Configure Discord client
-const client = new Client();
+const bot = new Bot(process.env.TG_TOKEN);
 
 // Function to connect to the database
 const connectToDatabase = () => {
@@ -61,19 +62,7 @@ const checkDevices = (devices) => {
         `🔴 Alert: Device ${device.deviceId} has OFFLINE for the last ${process.env.DEVICE_OFFLINE_MAX_TIME} minutes.\n`
       );
 
-      const channel = client.channels.cache.get(process.env.DEVICE_CHANNEL_ID);
-      if (channel) {
-        channel
-          .send(embed)
-          .then(() => {
-            logMessage("Query results sent successfully.");
-          })
-          .catch((error) => {
-            logMessage(`Error sending the query results: ${error}`);
-          });
-      } else {
-        logMessage("Specified channel not found.");
-      }
+     bot.api.sendMessage(process.env.TG_CHAT_ID, embed.toMarkdown(), { parse_mode: "MarkdownV2" });
     }
   });
 };
@@ -173,7 +162,6 @@ const sendAccountStatusMessage = () => {
     const queryTotalAuthBannedAccounts = `
       SELECT COUNT(*) AS total_auth_banned_accounts FROM account WHERE auth_banned != 0;
     `;
-
     // Execute the SQL queries
     connection.query(
       queryWithoutToken,
@@ -411,13 +399,8 @@ const sendAccountStatusMessage = () => {
                                               );
 
                                               // Send message to the specific channel
-                                              const channel =
-                                                client.channels.cache.get(
-                                                  process.env.CHANNEL_ID
-                                                );
-                                              if (channel) {
-                                                channel
-                                                  .send(embed)
+                                              if (process.env.TG_CHAT_ID) {
+                                                bot.api.sendMessage(process.env.TG_CHAT_ID, embed.toMarkdownV2(), { parse_mode: "MarkdownV2" })
                                                   .then(() => {
                                                     logMessage(
                                                       "Account status message sent successfully."
@@ -460,26 +443,23 @@ const sendAccountStatusMessage = () => {
   });
 };
 
-client.once("ready", () => {
-  logMessage("Bot is online!");
 
+// bot.command("disabled", (ctx) => {
+//   fetchDisabledAccounts();
+// });
+bot.command("check", (ctx) => {
   sendAccountStatusMessage();
+});
 
-  devicefetch();
+
+bot.start();
+logMessage("Bot is online!");
+sendAccountStatusMessage();
+
+devicefetch();
 
   // Set the interval for sending account messages
-  setInterval(sendAccountStatusMessage, process.env.CHECK_INTERVAL * 60 * 1000);
+setInterval(sendAccountStatusMessage, process.env.CHECK_INTERVAL * 60 * 1000);
 
   // Set the interval for sending devices messages
-  setInterval(devicefetch, process.env.DEVICE_CHECK_INTERVAL * 60 * 1000);
-});
-
-client.on("message", (message) => {
-  if (message.content === "$disabled") {
-    fetchDisabledAccounts();
-  } else if (message.content === "$check") {
-    sendAccountStatusMessage();
-  }
-});
-
-client.login(process.env.DISCORD_TOKEN);
+setInterval(devicefetch, process.env.DEVICE_CHECK_INTERVAL * 60 * 1000);
